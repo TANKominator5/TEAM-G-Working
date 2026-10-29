@@ -1,5 +1,7 @@
 # Sentinel — Bot Detection Gateway
 
+**Live demo: [https://sentinel-team-g.vercel.app](https://sentinel-team-g.vercel.app)**
+
 **Team G · Hack4Haldia '26**
 
 Sentinel protects a demo inventory API by evaluating request headers, frequency, and timing. Each protected request receives a score, an **allow**, **challenge**, or **block** decision, and the reasons behind that decision. A dashboard shows the recorded traffic and lets judges exercise all three outcomes.
@@ -16,7 +18,29 @@ The gateway uses explicit scoring rules. An optional Groq-hosted model summarize
 | Application | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
 | Optional traffic analysis | Groq, with `openai/gpt-oss-120b` as the default in code |
 
-**Delivery status:** The [demo runbook](docs/DEMO_RUNBOOK.md) and [integration notes](docs/SUPABASE_SETUP.md) record completed local checks against Supabase and Groq. They still list public Vercel deployment, verification of the public URL, and final submission as outstanding. No verified public demo URL is recorded in those documents.
+### Bonus feature status
+
+| Bonus | Status |
+|---|---|
+| Request fingerprinting | Implemented: keyed passive-header fingerprints, persisted churn evidence, request detail display |
+| Honeypot links/fields | Implemented as a hidden link and non-data-returning trap route, with persisted scoring and a guided demo |
+| Per-IP rolling windows | Implemented: atomic, database-backed 10-second / 60-second windows |
+| Small ML classifier trained on simulated traffic | Not implemented. The Groq analyst is not a custom-trained classifier. |
+
+The header fingerprint is a correlation hint, not a unique device identity. It
+hashes User-Agent, Accept-Language, and client-hint headers with the server secret;
+it excludes IPs, cookies, credentials, and invasive canvas/browser probes. Three
+changes in a 10-minute activity window add a weak +15 signal, never a standalone
+block. Shared-IP browsers and spoofed headers can produce false positives or evasion.
+
+The hidden anchor points to `/api/internal/inventory-export`; this route never
+returns inventory. One actual GET adds +45 trap history, two in a rolling ten
+minutes add +80, scoped to the client IP hash plus passive fingerprint. The next
+protected request sees that evidence. HEAD, speculative prefetches, and cross-site
+browser loads do not trigger the trap. These safeguards reduce—not eliminate—false
+positives from scanners. Click **4. Honeypot trap** to demonstrate it in isolation.
+
+**Delivery status:** Deployed to Vercel and verified at the public URL above, including operator login, protected access, challenge completion, burst blocking, persistence, and real Groq inference. See the [demo runbook](docs/DEMO_RUNBOOK.md) and [integration notes](docs/SUPABASE_SETUP.md). The Voyage PR and organizer submission remain outstanding. Sign in using the dashboard password configured by the team; credentials are not published here.
 
 ## Contents
 
@@ -280,7 +304,7 @@ Example scoring-preview body, using the fields in [`lib/contracts.ts`](lib/contr
 
 ## Security and privacy
 
-- **Server-only database access:** Row-level security is enabled on all four tables; browser roles cannot read them or execute the gateway RPCs. Server credentials remain outside client bundles.
+- **Server-only database access:** Row-level security is enabled on all six tables; browser roles cannot read them or execute the gateway RPCs. Server credentials remain outside client bundles.
 - **Pseudonymous rate tracking:** Raw IP addresses are not persisted. Decision records retain a 16-character prefix of the HMAC client key. They do retain the bounded user-agent string, request path, and scoring features; this is not a claim that no request metadata is stored.
 - **Signed sessions and proofs:** Tokens use HMAC signatures and expiration checks. Operator sessions last eight hours. Session and clearance cookies are `HttpOnly`, `SameSite=Strict`, and `Secure` in production.
 - **Bounded entry points:** Login and proof verification each permit 10 attempts per rolling minute per client identity. JSON readers enforce an 8 KB body limit. Mutation handlers check request origin.
@@ -321,7 +345,7 @@ For a **new Supabase project**, apply these files once, in order, through the SQ
 1. [`20261029072825_core_gateway.sql`](supabase/migrations/20261029072825_core_gateway.sql)
 2. [`20261029084105_ai_traffic_analyses.sql`](supabase/migrations/20261029084105_ai_traffic_analyses.sql)
 
-The existing **BotStop** project is documented as having both migrations already applied. See [Supabase setup](docs/SUPABASE_SETUP.md) before changing it.
+The existing **BotStop** project's migration status is recorded in [Supabase setup](docs/SUPABASE_SETUP.md). Apply migrations in filename order only on a new project; do not rerun an already-applied migration.
 
 ```bash
 npm run dev
@@ -351,7 +375,7 @@ npm run test:e2e
 
 PGlite is a test database, not a runtime fallback. Browser regression fixtures intercept traffic in Chromium; they are not served by the application or inserted into Supabase. Provider responses are mocked in regression tests.
 
-Separately, the [integration notes](docs/SUPABASE_SETUP.md) record live local checks of Supabase persistence, challenge redemption and replay rejection, the dashboard, demo isolation, and real Groq inference with cache reuse. These recorded checks do not establish public-deployment readiness, detection accuracy, or production throughput. This README does not report a new test run or benchmark.
+Separately, the [integration notes](docs/SUPABASE_SETUP.md) record live local checks of Supabase persistence, challenge redemption and replay rejection, the dashboard, demo isolation, and real Groq inference with cache reuse. The public Vercel deployment has also passed the browser walkthrough (login/logout, normal access, challenge and retry, burst blocking, real inference, persistence, and mobile layout). These checks are not a detection-accuracy or production-throughput benchmark.
 
 ## Deployment and maintenance
 
@@ -379,7 +403,7 @@ The [runbook](docs/DEMO_RUNBOOK.md) identifies the submission target as `Voyage-
 | Throughput | Each protected request requires database work. The repository does not establish a production capacity or latency guarantee. |
 | Traffic analysis | Sample-limited and advisory; it is not a separately trained bot classifier. Provider outages do not disable rule-based enforcement. |
 | Network protection | Application-layer enforcement is not an edge WAF or network-level denial-of-service defense. |
-| Additional features | Honeypots, richer fingerprinting, exports, Redis/Upstash rate state, and a custom trained classifier are listed as future work, not completed capabilities. |
+| Additional features | Passive fingerprinting, a honeypot link, and rolling windows are implemented. Exports, Redis/Upstash rate state, and a custom-trained classifier remain future work. |
 
 ## Repository guide
 

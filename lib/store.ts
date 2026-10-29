@@ -49,6 +49,16 @@ const windowSchema = z.object({
 });
 export type RequestWindow = z.infer<typeof windowSchema>;
 
+const signalsSchema = z.object({ fingerprintChanges: z.number().int().nonnegative(), honeypotHits: z.number().int().min(0).max(20) });
+export async function observeSecurity(key: string, fingerprint: string, honeypot = false): Promise<z.infer<typeof signalsSchema>> {
+  const data = await database("rpc/gw_observe_security", { method: "POST", body: JSON.stringify({
+    p_client_key: key, p_fingerprint: fingerprint, p_honeypot: honeypot,
+  }) });
+  const parsed = signalsSchema.safeParse(data);
+  if (!parsed.success) throw new ApiFailure(503, "STORAGE_UNAVAILABLE", "The security-signal migration is missing or incompatible.");
+  return parsed.data;
+}
+
 export async function recordRequest(key: string): Promise<RequestWindow> {
   const data = await database("rpc/gw_record_request", { method: "POST", body: JSON.stringify({ p_client_key: key }) });
   const parsed = windowSchema.safeParse(data);

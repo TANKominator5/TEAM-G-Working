@@ -79,5 +79,23 @@ An additional live browser run verified the isolated normal/challenge/burst demo
 actual proof completion and retry, real model analysis with simulation labeling,
 and continued ordinary visitor access after the demo burst.
 
-The deployed Vercel application still requires end-to-end verification after
-deployment. Local checks do not substitute for production verification.
+## Verified public Vercel deployment
+
+Live URL: **https://sentinel-team-g.vercel.app**
+
+Vercel project: `sentinel-team-g` (`prj_fhtl2xPEnsg4jN7DUkIivVGH9yL9`),
+team `tankominator5s-projects`, function region `icn1`, Node.js 24.
+Initial verified production deployment: `dpl_2k2PqgDErssRAYvT95zc98jpMAad`,
+source commit `fff63b98731c76a55184dcc9eaf79934844f7ccd` on `team-g-solution`.
+
+Production variables were configured without uploading `.env.local`. The four
+credentials/signing/password values are sensitive variables; URL, model, and proxy
+mode are plain configuration. No secret values are committed in this repository.
+
+Production Chromium checks passed for password login, Secure/HttpOnly admin and
+clearance cookies, real normal/challenge/burst scenarios, successful challenge
+retry, ordinary-visitor isolation, persisted telemetry, real Groq inference,
+reload persistence, mobile overflow, and logout access denial. The bounded burst
+yielded 5 allowed, 15 challenged, and 4 blocked requests. No browser runtime errors
+were observed. Public liveness returned configured=true; unauthenticated stats
+correctly returned HTTP 401.

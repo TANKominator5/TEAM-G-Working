@@ -190,3 +190,23 @@ test("challenge navigation verifies the issued token rather than replacing it", 
   await expect(page.getByRole("status")).toContainText("The protected API returned HTTP 200");
   expect(verified).toBe(true);
 });
+
+test("honeypot demo visits the trap and shows its persistent scoring evidence", async ({ page }) => {
+  await mockApi(page);
+  let hits = 0;
+  await page.route("**/api/internal/inventory-export", async route => {
+    hits++;
+    await route.fulfill({ status: hits >= 2 ? 429 : 403, json: {
+      score: hits >= 2 ? 80 : 45, decision: hits >= 2 ? "block" : "challenge", requestId: `trap-${hits}`,
+      reasons: [{ code: hits >= 2 ? "REPEATED_HONEYPOT" : "HONEYPOT_HIT", message: "Test trap evidence", weight: hits >= 2 ? 80 : 45 }],
+    } });
+  });
+  await page.goto("/");
+  const trap = page.locator('body > a[href="/api/internal/inventory-export"]');
+  await expect(trap).toBeHidden();
+  await expect(trap).toHaveAttribute("tabindex", "-1");
+  await page.getByRole("button", { name: "4. Honeypot trap", exact: true }).click();
+  await expect(page.getByLabel("Demo result")).toContainText("3 requests completed");
+  await expect(page.getByLabel("Demo result")).toContainText("1 blocked");
+  expect(hits).toBe(2);
+});

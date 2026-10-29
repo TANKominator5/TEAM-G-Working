@@ -9,6 +9,9 @@ export interface RequestFeatures {
   requests60s: number;
   intervalCount: number;
   intervalCv: number | null;
+  fingerprint?: string;
+  fingerprintChanges?: number;
+  honeypotHits?: number;
 }
 export interface ScoreResult { score: number; decision: Decision; reasons: Reason[] }
 export interface DecisionRecord extends ScoreResult {

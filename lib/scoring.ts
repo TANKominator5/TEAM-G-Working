@@ -9,6 +9,9 @@ export const featureSchema = z.object({
   requests60s: z.number().int().min(0).max(1_000_000),
   intervalCount: z.number().int().min(0).max(255),
   intervalCv: z.number().finite().min(0).max(1000).nullable(),
+  fingerprint: z.string().regex(/^[a-f0-9]{32}$/).optional(),
+  fingerprintChanges: z.number().int().min(0).max(1000000).optional(),
+  honeypotHits: z.number().int().min(0).max(20).optional(),
 }).strict().refine((f) => f.requests10s <= f.requests60s, {
   message: "requests10s cannot exceed requests60s", path: ["requests10s"],
 });
@@ -23,6 +26,11 @@ export function scoreRequest(features: RequestFeatures, cleared = false): ScoreR
   }
   if (!features.hasAccept) add("MISSING_ACCEPT", "Accept header is absent.", 10);
   if (!features.hasAcceptLanguage) add("MISSING_LANGUAGE", "Accept-Language is absent; a weak supporting signal.", 10);
+  if ((features.fingerprintChanges ?? 0) >= 3) {
+    add("FINGERPRINT_CHURN", "The client's passive header fingerprint changed at least 3 times in a 10-minute activity window. Shared-IP users can also cause this.", 15);
+  }
+  if ((features.honeypotHits ?? 0) >= 2) add("REPEATED_HONEYPOT", "This header fingerprint accessed the hidden trap at least twice in 10 minutes.", 80);
+  else if ((features.honeypotHits ?? 0) > 0) add("HONEYPOT_HIT", "This header fingerprint accessed a hidden, non-user-facing trap within 10 minutes.", 45);
 
   if (features.requests10s > 20) add("EXTREME_BURST", "More than 20 requests in 10 seconds.", 80);
   else if (features.requests10s > 10) add("HIGH_BURST", "More than 10 requests in 10 seconds.", 50);

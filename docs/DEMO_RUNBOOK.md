@@ -1,5 +1,21 @@
 # Sentinel demo-ready baseline
 
+## Public demo
+
+**https://sentinel-team-g.vercel.app**
+
+Deployed to Vercel project `sentinel-team-g` in `tankominator5s-projects`, using
+the `team-g-solution` source branch. Sign in with the team's configured dashboard
+password. Do not share credentials in public documentation or the PR.
+
+The production browser walkthrough passed: normal traffic allowed, suspicious
+traffic challenged, proof completed and retried with HTTP 200, and a 24-request
+burst returned 5 allowed / 15 challenged / 4 blocked. Real GPT-OSS 120B analysis
+was saved and remained visible after reload. Ordinary visitor access remained
+allowed, admin/clearance cookies were Secure and HttpOnly, mobile layout fit the
+viewport, and logout restored HTTP 401 for telemetry. These are bounded demo
+checks, not load or detection-accuracy benchmarks.
+
 ## Launch locally
 
 Requires Node.js 24 LTS and the project `.env.local` at:
@@ -46,6 +62,17 @@ BotStop already has both database migrations applied.
    visitor access still works because authenticated demo runs have isolated rate
    windows. Refresh the page to show that decisions and AI findings persist.
 
+### Bonus demonstration
+
+Click **4. Honeypot trap**. It visits a hidden trap, makes a protected request that
+inherits that trap history, then visits the trap again. Inspect `HONEYPOT_HIT`
+and `REPEATED_HONEYPOT` in the decision rows, plus the recorded passive fingerprint.
+The demo uses a separate authenticated identity so your real browser isn't penalized.
+
+Say: "A scraper that follows hidden links reveals suspicious behavior. We retain
+that evidence and explain how it changes later decisions. Header fingerprints
+help correlate patterns, but are spoofable and are not proof of a unique device."
+
 ### Demo behavior and limits
 
 - The simulator sends actual HTTP requests to our own `/protected` endpoint.
@@ -81,19 +108,20 @@ BotStop already has both database migrations applied.
 
 ## Remaining before hackathon submission
 
-1. **Deploy to Vercel.** Import the fork and deploy `team-g-solution` (not the
-   starter `main` branch). Set the five required server variables and optionally
-   `GROQ_MODEL=openai/gpt-oss-120b`. Keep `TRUST_PROXY=false`; Vercel is detected.
-   No Vercel account connection is available in the coding session yet.
-2. **Verify the public URL.** Repeat the walkthrough there, including login,
-   persistence, challenge cookies, demo isolation, and real inference.
-3. **Finalize submission.** Add the live URL, team member names, features, tech,
+1. **Finalize submission.** Add the live URL, team member names, features, tech,
    and limitations to the PR against `Voyage-Hack4Haldia-26/TEAM-G:main`. Submit
-   separately to the organizer's MLH/OrganizerHQ platform.
+    separately to the organizer's MLH/OrganizerHQ platform.
+
+Deployment and public verification are complete. For future updates, deploy the
+solution branch, not the starter `main`. Production variables are configured in
+Vercel; preview environments do not receive privileged keys by default. Automatic
+production-branch behavior has not been verified; explicitly target production
+when deploying updates or review the project's Git settings first.
 
 ## Optional after this baseline is deployed
 
-Honeypots, richer fingerprinting, Redis/Upstash for lower-latency high-volume rate
-state, observe/enforce controls, exports, and a separately trained small classifier.
+Richer fingerprinting, Redis/Upstash for lower-latency high-volume rate state,
+observe/enforce controls, exports, and a separately trained small classifier.
+Passive header fingerprinting, honeypot links, and per-IP rolling windows are implemented.
 The Groq analyst is not a custom-trained bot classifier. These are stretch goals,
 not blockers for the working core demo.

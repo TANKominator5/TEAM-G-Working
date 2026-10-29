@@ -15,7 +15,7 @@ beforeAll(async () => {
     await db.exec(readFileSync(new URL(file, directory), "utf8"));
   }
 }, 30000);
-beforeEach(async () => { await db.exec("truncate public.gw_clients, public.gw_decisions, public.gw_challenges, public.gw_analyses;"); });
+beforeEach(async () => { await db.exec("truncate public.gw_clients, public.gw_decisions, public.gw_challenges, public.gw_analyses, public.gw_signals, public.gw_honeypots;"); });
 afterAll(async () => { await db.close(); });
 
 async function record(key: string) {
@@ -89,5 +89,23 @@ describe("Supabase SQL migration", () => {
       [randomUUID(), "a".repeat(64)]);
     await db.exec("select public.gw_cleanup()");
     expect((await db.query("select * from public.gw_analyses")).rows).toHaveLength(0);
+  });
+  it("persists fingerprint changes and scopes trap history to the matching browser pattern", async () => {
+    const key = "a".repeat(64), first = "b".repeat(32), second = "c".repeat(32);
+    const observe = async (fingerprint: string, trap = false) => (await db.query<{ result: { fingerprintChanges: number; honeypotHits: number } }>(
+      "select public.gw_observe_security($1, $2, $3) as result", [key, fingerprint, trap])).rows[0].result;
+    expect(await observe(first)).toEqual({ fingerprintChanges: 0, honeypotHits: 0 });
+    expect(await observe(first, true)).toEqual({ fingerprintChanges: 0, honeypotHits: 1 });
+    expect(await observe(first)).toEqual({ fingerprintChanges: 0, honeypotHits: 1 });
+    expect(await observe(second)).toEqual({ fingerprintChanges: 1, honeypotHits: 0 });
+    expect(await observe(first, true)).toEqual({ fingerprintChanges: 2, honeypotHits: 2 });
+    await db.exec("update public.gw_signals set activity_start=now()-interval '11 minutes'; update public.gw_honeypots set hit_times=array[now()-interval '11 minutes'];");
+    expect(await observe(first)).toEqual({ fingerprintChanges: 0, honeypotHits: 0 });
+  });
+  it("denies browser roles access to fingerprint and honeypot history", async () => {
+    const { rows } = await db.query<{ table_access: boolean; rpc_access: boolean }>(`select
+      has_table_privilege('anon', 'public.gw_signals', 'select') or has_table_privilege('authenticated', 'public.gw_honeypots', 'select') as table_access,
+      has_function_privilege('anon', 'public.gw_observe_security(text,text,boolean)', 'execute') as rpc_access`);
+    expect(rows[0]).toEqual({ table_access: false, rpc_access: false });
   });
 });

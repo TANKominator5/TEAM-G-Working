@@ -6,7 +6,7 @@ import { clientKey, signToken } from "../lib/security";
 import { DEMO_HEADER } from "../lib/contracts";
 import * as store from "../lib/store";
 
-vi.mock("../lib/store", () => ({ recordRequest: vi.fn(), saveDecision: vi.fn(), consumeChallenge: vi.fn() }));
+vi.mock("../lib/store", () => ({ recordRequest: vi.fn(), saveDecision: vi.fn(), consumeChallenge: vi.fn(), observeSecurity: vi.fn() }));
 const resource = vi.fn(async () => ({ message: "secret resource", items: [] }));
 const gateway = withGateway(resource);
 const normalWindow = { requests10s: 1, requests60s: 1, intervalCount: 0, intervalCv: null };
@@ -22,6 +22,7 @@ beforeEach(() => {
   vi.mocked(store.recordRequest).mockResolvedValue(normalWindow);
   vi.mocked(store.saveDecision).mockResolvedValue();
   vi.mocked(store.consumeChallenge).mockResolvedValue();
+  vi.mocked(store.observeSecurity).mockResolvedValue({ fingerprintChanges: 0, honeypotHits: 0 });
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -81,6 +82,32 @@ describe("gateway middleware", () => {
     expect(response.status).toBe(429);
     expect(await response.json()).toMatchObject({ code: "DEMO_BUDGET_LIMIT" });
     expect(resource).not.toHaveBeenCalled();
+  });
+  it("includes server-observed fingerprints and historical honeypot signals", async () => {
+    vi.mocked(store.observeSecurity).mockResolvedValue({ fingerprintChanges: 3, honeypotHits: 1 });
+    const response = await gateway(browser());
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ reasons: expect.arrayContaining([
+      expect.objectContaining({ code: "FINGERPRINT_CHURN", weight: 15 }),
+      expect.objectContaining({ code: "HONEYPOT_HIT", weight: 45 }),
+    ]) });
+    expect(store.saveDecision).toHaveBeenCalledWith(expect.objectContaining({ features: expect.objectContaining({ fingerprint: expect.stringMatching(/^[a-f0-9]{32}$/), honeypotHits: 1 }) }));
+    expect(resource).not.toHaveBeenCalled();
+  });
+  it("never reveals a resource through the trap", async () => {
+    vi.mocked(store.observeSecurity).mockResolvedValue({ fingerprintChanges: 0, honeypotHits: 1 });
+    const trap = withGateway(resource, { honeypot: true });
+    const response = await trap(browser());
+    expect(response.status).toBe(403);
+    expect(await response.json()).not.toHaveProperty("data");
+    expect(store.observeSecurity).toHaveBeenCalledWith(expect.any(String), expect.any(String), true);
+    expect(resource).not.toHaveBeenCalled();
+  });
+  it("does not count cross-site trap loads or speculative prefetches", async () => {
+    const trap = withGateway(resource, { honeypot: true });
+    expect((await trap(new Request(browser(), { headers: { "sec-fetch-site": "cross-site" } }))).status).toBe(403);
+    expect((await trap(new Request(browser(), { headers: { "sec-purpose": "prefetch" } }))).status).toBe(204);
+    expect(store.observeSecurity).not.toHaveBeenCalled();
   });
 });
 

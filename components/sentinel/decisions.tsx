@@ -26,6 +26,9 @@ function RequestDetails({ row }: { row: DecisionRecord }) {
       <div><dt>Observed intervals</dt><dd>{features.intervalCount}</dd></div>
       <div><dt>Interval variation (CV)</dt><dd>{features.intervalCv === null ? "Insufficient samples" : features.intervalCv.toFixed(3)}</dd></div>
       <div><dt>Request latency</dt><dd>{row.latencyMs.toFixed(1)} ms</dd></div>
+      <div><dt>Fingerprint changes (10m activity)</dt><dd>{features.fingerprintChanges ?? "Not recorded"}</dd></div>
+      <div><dt>Honeypot hits (10m)</dt><dd>{features.honeypotHits ?? "Not recorded"}</dd></div>
+      <div className="feature-wide"><dt>Passive header fingerprint</dt><dd>{features.fingerprint ?? "Not recorded for this older request"}</dd></div>
       <div className="feature-wide"><dt>User agent</dt><dd>{features.userAgent || row.userAgent || "Not provided"}</dd></div>
       <div className="feature-wide"><dt>Anonymized client</dt><dd>{row.clientId}</dd></div>
       <div className="feature-wide"><dt>Timestamp</dt><dd>{row.timestamp}</dd></div>
