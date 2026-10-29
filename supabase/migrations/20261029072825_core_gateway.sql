@@ -1,4 +1,5 @@
--- Apply once in the Supabase SQL Editor. All access is server-side, using the
+-- Applied to BotStop via MCP as migration 20261029072825. On a NEW project,
+-- apply once in the Supabase SQL Editor. All access is server-side, using the
 -- service-role key. No anonymous/authenticated client can access these tables/RPCs.
 begin;
 

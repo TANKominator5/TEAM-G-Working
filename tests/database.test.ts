@@ -10,7 +10,7 @@ import type { RequestWindow } from "../lib/store";
 const db = new PGlite();
 beforeAll(async () => {
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls;");
-  await db.exec(readFileSync(new URL("../supabase/migrations/202610290001_core_gateway.sql", import.meta.url), "utf8"));
+  await db.exec(readFileSync(new URL("../supabase/migrations/20261029072825_core_gateway.sql", import.meta.url), "utf8"));
 }, 30000);
 beforeEach(async () => { await db.exec("truncate public.gw_clients, public.gw_decisions, public.gw_challenges;"); });
 afterAll(async () => { await db.close(); });

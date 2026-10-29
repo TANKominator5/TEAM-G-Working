@@ -37,8 +37,11 @@ openssl rand -hex 32
 ```
 
 1. Create/select a Supabase project. Run
-   [`supabase/migrations/202610290001_core_gateway.sql`](supabase/migrations/202610290001_core_gateway.sql)
+   [`supabase/migrations/20261029072825_core_gateway.sql`](supabase/migrations/20261029072825_core_gateway.sql)
    **once** in its SQL Editor (or apply it through your connected Supabase MCP).
+   **Our BotStop project is already migrated; do not run it again there.**
+   See [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md) for the verified project
+   URL and remaining runtime configuration.
 2. Fill `.env.local` with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and the
    generated `GATEWAY_SECRET`. Set a strong `DASHBOARD_PASSWORD` (required in
    production; optional locally). Never commit these secrets or prefix them with
