@@ -60,5 +60,11 @@ These checks generated real, bounded test traffic visible in recent decisions.
 The loopback-only test server used distinct documentation-range client addresses
 under an explicit trusted-proxy override; production IP trust was not changed.
 
-The deployed Vercel application and teammate's dashboard UI still require their
-own end-to-end verification after deployment/integration.
+The teammate's dashboard has also been verified in Chromium against live
+Supabase: password login/logout, stats/history, expanded request details, protected
+resource inspection, and a 390px mobile layout with no page overflow or JavaScript
+errors. Deterministic browser regressions separately cover pagination, filters,
+setup failures, and expired sessions.
+
+The deployed Vercel application still requires end-to-end verification after
+deployment. Local checks do not substitute for production verification.

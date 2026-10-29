@@ -20,8 +20,9 @@ starter references only; `npm` now runs the Next.js application.
 - Working SHA-256 proof-of-work challenge, signed client-bound tokens, one-time
   database redemption, and a 15-minute HttpOnly clearance cookie. Clearance never
   bypasses hard blocks. Proof of work adds cost, not proof of human identity.
-- Persistent decisions, minute-bucket metrics, cursor pagination, and dashboard
-  APIs. **Dashboard UI is assigned to our frontend teammate**; see the handoff below.
+- Persistent decisions, minute-bucket metrics, and a responsive live dashboard
+  with sign-in, charts, filters, cursor pagination, scoring explanations, and a
+  protected-resource inspector, integrated from our frontend teammate's work.
 - Password-protected telemetry in production with rate-limited login and signed
   HttpOnly session cookies. No raw IPs or authorization/cookie headers are stored.
 
@@ -89,12 +90,19 @@ are distinct from bot decisions: `{ "error": "...", "code": "..." }` with 503.
 npm test
 npm run typecheck
 npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
 Tests cover scoring, enforcement, challenge proofs, auth, input limits, pagination,
 the REST adapter, and the **actual SQL migration** using PostgreSQL-in-WASM (PGlite).
 The test database is not an application storage fallback. Live Supabase and Vercel
 must also be checked after configuring credentials.
+Browser regression tests cover login/logout, request inspection, pagination with
+continued stats polling, filters, setup errors, expired sessions, and mobile layout.
+Their fixture traffic is intercepted in Chromium only, never served by the app or
+written to Supabase. Browser traces and videos are disabled to avoid capturing
+credentials. Live browser verification is performed separately with local secrets.
 
 ### Deploy to Vercel
 
@@ -135,17 +143,17 @@ Bots and AI agents hammer websites. Build a gateway that scores every request an
 
 ## Must-have (core, do these first)
 
-- [ ] Middleware that scores each request (headers, timing, request rate)
-- [ ] Allow / challenge / block decisions with reasons
-- [ ] Protected demo route behind the gateway
-- [ ] Dashboard of recent decisions
+- [x] Middleware that scores each request (headers, timing, request rate)
+- [x] Allow / challenge / block decisions with reasons
+- [x] Protected demo route behind the gateway
+- [x] Dashboard of recent decisions
 
 ## Bonus (only after the core works end to end)
 
 - [ ] Request fingerprinting
 - [ ] Honeypot links/fields
 - [ ] Small ML classifier trained on simulated traffic
-- [ ] Per-IP rolling windows
+- [x] Per-IP rolling windows
 
 ## Industry-level tech we expect you to use
 

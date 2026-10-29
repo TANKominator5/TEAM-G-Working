@@ -1,0 +1,115 @@
+import { expect, test, type Page } from "@playwright/test";
+
+// Browser-only fixtures; never used by the application or written to Supabase.
+const timestamp = "2026-10-29T12:00:00Z";
+const features = { userAgent: "Browser test fixture", hasAccept: true, hasAcceptLanguage: true, requests10s: 1, requests60s: 1, intervalCount: 0, intervalCv: null };
+const row = (index: number, decision = "allow") => ({
+  id: `fixture-${index}`, timestamp, clientId: `test-client-${index}`, method: "GET", path: "/protected",
+  score: decision === "allow" ? 0 : decision === "challenge" ? 45 : 80, decision,
+  reasons: [{ code: "TEST_SIGNAL", message: "A test-only scoring explanation.", weight: 0 }],
+  status: decision === "allow" ? 200 : decision === "challenge" ? 403 : 429,
+  latencyMs: 15, userAgent: features.userAgent, features,
+});
+const stats = {
+  windowMinutes: 60, total: 40, allowed: 20, challenged: 12, blocked: 8,
+  averageScore: 32.5, averageLatencyMs: 15,
+  series: Array.from({ length: 60 }, (_, index) => ({
+    timestamp: new Date(Date.parse(timestamp) + index * 60000).toISOString(),
+    allowed: index === 59 ? 20 : 0, challenged: index === 59 ? 12 : 0, blocked: index === 59 ? 8 : 0,
+  })),
+};
+
+async function mockApi(page: Page, initiallyAuthenticated = true) {
+  let authenticated = initiallyAuthenticated;
+  const calls = { stats: 0, decisions: 0 };
+  await page.route("**/api/auth", async route => {
+    if (route.request().method() === "POST") authenticated = true;
+    if (route.request().method() === "DELETE") authenticated = false;
+    await route.fulfill({ json: { authenticated, required: true } });
+  });
+  await page.route("**/api/stats", async route => { calls.stats++; await route.fulfill({ json: stats }); });
+  await page.route("**/api/decisions?*", async route => {
+    calls.decisions++;
+    const params = new URL(route.request().url()).searchParams;
+    const decision = params.get("decision") ?? "allow";
+    await route.fulfill({ json: params.has("cursor")
+      ? { decisions: [row(2, decision)], nextCursor: null }
+      : { decisions: [row(1, decision)], nextCursor: "fixture-cursor" } });
+  });
+  await page.route("**/protected", route => route.fulfill({ json: {
+    score: 0, decision: "allow", reasons: row(1).reasons, requestId: "fixture-inspector",
+    data: { message: "Browser fixture resource", items: [] },
+  } }));
+  return calls;
+}
+
+test("login, summary, details, protected inspector, and logout", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await mockApi(page, false);
+  await page.goto("/");
+  await page.getByLabel("Dashboard password").fill("test-only-password");
+  await page.getByRole("button", { name: /Sign in to console/ }).click();
+  await expect(page.getByRole("heading", { name: "Security overview." })).toBeVisible();
+  await expect(page.locator(".summary-card.total .summary-value")).toHaveText("40");
+  await page.getByRole("button", { name: "Inspect request fixture-1" }).click();
+  await expect(page.getByText("A test-only scoring explanation.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Try protected API" }).click();
+  await expect(page.locator(".resource-json")).toContainText("Browser fixture resource");
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByLabel("Dashboard password")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("pagination freezes the table while stats continue polling", async ({ page }) => {
+  await page.clock.install();
+  const calls = await mockApi(page);
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Load more" })).toBeEnabled();
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(page.getByText("Viewing older requests. Live table updates are paused.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Inspect request fixture-2" })).toBeVisible();
+  const previousStats = calls.stats;
+  const previousDecisions = calls.decisions;
+  await page.clock.runFor(5500);
+  await expect.poll(() => calls.stats).toBeGreaterThan(previousStats);
+  expect(calls.decisions).toBe(previousDecisions);
+  await page.getByRole("button", { name: "Return to live" }).click();
+  await expect(page.getByRole("button", { name: "Inspect request fixture-2" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Load more" })).toBeEnabled();
+});
+
+test("decision filters load the correct feed", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Inspect request fixture-1" })).toBeVisible();
+  await page.getByRole("group", { name: "Filter decisions" }).getByRole("button", { name: "Blocked", exact: true }).click();
+  await expect(page.locator(".decisions-table .decision-badge")).toHaveText("Blocked");
+});
+
+test("a setup failure is not presented as live or empty successful telemetry", async ({ page }) => {
+  await mockApi(page);
+  await page.route("**/api/stats", route => route.fulfill({ status: 503, json: { error: "Configure request storage.", code: "SETUP_REQUIRED" } }));
+  await page.route("**/api/decisions?*", route => route.fulfill({ status: 503, json: { error: "Configure request storage.", code: "SETUP_REQUIRED" } }));
+  await page.goto("/");
+  await expect(page.locator(".error-notice")).toContainText("Gateway setup required");
+  await expect(page.getByText("Decision feed unavailable", { exact: true })).toBeVisible();
+  await expect(page.locator(".summary-card.total .summary-value")).toHaveText("—");
+  await expect(page.getByText("Live connection", { exact: true })).toHaveCount(0);
+});
+
+test("expired telemetry sessions return the user to sign-in", async ({ page }) => {
+  await mockApi(page);
+  await page.route("**/api/stats", route => route.fulfill({ status: 401, json: { error: "Session expired.", code: "UNAUTHORIZED" } }));
+  await page.goto("/");
+  await expect(page.getByLabel("Dashboard password")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Security overview." })).toHaveCount(0);
+});
+
+test("mobile dashboard fits the viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockApi(page);
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Inspect request fixture-1" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
