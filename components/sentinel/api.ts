@@ -8,14 +8,14 @@ export function asError(error: unknown): DashboardError {
   return error instanceof DashboardError ? error : new DashboardError("The gateway could not be reached. Check your connection and try again.");
 }
 
-export async function fetchJson<T>(url: string, init: RequestInit = {}, gateway = false): Promise<{ body: T; status: number }> {
+export async function fetchJson<T>(url: string, init: RequestInit = {}, gateway = false, timeoutMs = 15_000): Promise<{ body: T; status: number }> {
   let response: Response;
   try {
     response = await fetch(url, {
       ...init,
       credentials: "include",
       cache: "no-store",
-      signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
+      signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       headers: { Accept: "application/json", ...init.headers },
     });
   } catch (error) {

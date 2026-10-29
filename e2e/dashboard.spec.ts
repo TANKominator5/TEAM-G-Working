@@ -28,6 +28,7 @@ async function mockApi(page: Page, initiallyAuthenticated = true) {
     await route.fulfill({ json: { authenticated, required: true } });
   });
   await page.route("**/api/stats", async route => { calls.stats++; await route.fulfill({ json: stats }); });
+  await page.route("**/api/analyses", route => route.fulfill({ json: { analyses: [], configured: false, model: "llama-3.3-70b-versatile" } }));
   await page.route("**/api/decisions?*", async route => {
     calls.decisions++;
     const params = new URL(route.request().url()).searchParams;
@@ -112,4 +113,29 @@ test("mobile dashboard fits the viewport", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Inspect request fixture-1" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("AI setup is explicit and never fabricates a finding", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await expect(page.getByText(/AI setup required: add/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Analyze traffic", exact: true })).toBeDisabled();
+  await expect(page.getByText(/No saved AI findings yet/)).toBeVisible();
+});
+
+test("AI findings are displayed as advisory evidence, not enforced actions", async ({ page }) => {
+  await mockApi(page);
+  await page.route("**/api/analyses", route => route.fulfill({ json: { analyses: [], configured: true, model: "llama-3.3-70b-versatile" } }));
+  await page.route("**/api/analyze", route => route.fulfill({ json: { cached: false, analysis: {
+    id: "fixture-analysis", createdAt: timestamp, model: "llama-3.3-70b-versatile", inputHash: "test-hash",
+    sampleSize: 10, windowTotal: 40, windowStart: timestamp, windowEnd: timestamp,
+    finding: { classification: "likely_automation", risk: "high", summary: "A test-only burst pattern was observed.",
+      evidence: ["Ten sampled requests arrived in one second."], recommendedAction: "challenge",
+      recommendations: ["Review shared-IP false positives."], limitations: "Small samples do not prove malicious activity." },
+  } } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Analyze traffic", exact: true }).click();
+  await expect(page.getByText("A test-only burst pattern was observed.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/AI does not change gateway decisions/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /12:00 · high/ })).toBeVisible();
 });

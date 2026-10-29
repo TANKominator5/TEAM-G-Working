@@ -4,7 +4,7 @@
 
 ## Sentinel — our implementation
 
-**Next.js + TypeScript + Tailwind + Supabase PostgreSQL**, deployable to Vercel.
+**Next.js + TypeScript + Tailwind + Supabase PostgreSQL + Groq**, deployable to Vercel.
 The original event brief is preserved below. The old Flask/Express files are
 starter references only; `npm` now runs the Next.js application.
 
@@ -25,6 +25,9 @@ starter references only; `npm` now runs the Next.js application.
   protected-resource inspector, integrated from our frontend teammate's work.
 - Password-protected telemetry in production with rate-limited login and signed
   HttpOnly session cookies. No raw IPs or authorization/cookie headers are stored.
+- Optional **AI traffic analyst** using an open-weight model on Groq (default:
+  Llama 3.3 70B). It summarizes evidence from recent traffic, persists advisory
+  findings, and never changes gateway enforcement. See AI setup below.
 
 ### Local setup
 
@@ -37,10 +40,10 @@ cp .env.example .env.local
 openssl rand -hex 32
 ```
 
-1. Create/select a Supabase project. Run
-   [`supabase/migrations/20261029072825_core_gateway.sql`](supabase/migrations/20261029072825_core_gateway.sql)
-   **once** in its SQL Editor (or apply it through your connected Supabase MCP).
-   **Our BotStop project is already migrated; do not run it again there.**
+1. Create/select a Supabase project. Apply the SQL files in
+   [`supabase/migrations/`](supabase/migrations/) **once, in filename order** in its
+   SQL Editor (or apply through your connected Supabase MCP).
+   **Our BotStop project already has both migrations; do not run them again there.**
    See [`docs/SUPABASE_SETUP.md`](docs/SUPABASE_SETUP.md) for the verified project
    URL and remaining runtime configuration.
 2. Fill `.env.local` with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and the
@@ -73,6 +76,8 @@ the remaining implementation files. Shared response types are in `lib/contracts.
 | GET | `/api/decisions?limit=25&decision=allow&cursor=...` | Admin-only persistent decision history |
 | GET / POST / DELETE | `/api/auth` | Session state / password login / logout |
 | POST | `/api/challenge/verify` | Redeem `{ token, solution }` and set clearance cookie |
+| GET | `/api/analyses` | Admin-only saved AI findings and AI configuration presence |
+| POST | `/api/analyze` | Admin-only Groq analysis of server-observed traffic; body `{}` |
 
 `/api/score` expects all fields in `RequestFeatures` from `lib/contracts.ts`, e.g.:
 
@@ -104,12 +109,45 @@ Their fixture traffic is intercepted in Chromium only, never served by the app o
 written to Supabase. Browser traces and videos are disabled to avoid capturing
 credentials. Live browser verification is performed separately with local secrets.
 
+### Groq AI setup
+
+Add a Groq API key to `.env.local` and Vercel's server environment:
+
+```dotenv
+GROQ_API_KEY=<your Groq key>
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+Restart/redeploy, sign in, generate a request using the inspector, then click
+**Analyze traffic**. A hosted inference provider runs the model; Vercel does not
+host the model weights. `GROQ_MODEL` can select another Groq-supported text model.
+
+The analyst uses JSON-object mode plus server-side Zod validation (Llama 3.3 does
+not support Groq's strict JSON-schema mode). It analyzes at most 100 recent
+requests and the 10 largest sampled client groups, reports the sample size, and
+persists findings in Supabase. Only anonymized numeric observations, timestamps,
+and allowlisted signal codes are sent: no raw IPs, persistent client IDs, user-agent
+strings, paths, cookies, or credentials. Recommendations are advisory only.
+
+An identical traffic snapshot can reuse a successful database-cached result for
+up to five minutes. A global database-backed budget permits at most two new
+inferences per rolling minute (failed provider attempts also consume budget).
+Inference is explicit and awaited, with bounded tokens and a timeout, not a
+fire-and-forget background task. Missing keys, outages, truncated/invalid outputs,
+and rate limits are shown as errors; the gateway remains functional. Analyses
+expire after seven days through the cleanup function.
+
+Without `GROQ_API_KEY`, the dashboard explicitly shows AI setup instructions and
+does not fabricate findings. Live model inference still needs verification once
+the user's Groq credential is configured; provider responses in regression tests
+are mocked and do not demonstrate real inference quality.
+
 ### Deploy to Vercel
 
 1. Import `TANKominator5/TEAM-G-Working`, framework **Next.js**.
 2. Select `team-g-solution` as the production branch, or deploy its preview.
-3. Add the four required environment variables listed above to the relevant
-   Vercel environments. Keep `TRUST_PROXY=false`; Vercel is auto-detected and its
+3. Add the four required environment variables and `GROQ_API_KEY` for AI to the
+   relevant Vercel environments. Keep `TRUST_PROXY=false`; Vercel is auto-detected and its
    platform-overwritten `x-vercel-forwarded-for` header supplies the client IP.
 4. Deploy and check `/health`, normal access, a challenge, a rate-limit block, and
    dashboard persistence. Apply the Supabase migration before this check.
@@ -128,8 +166,9 @@ signal. Supabase-backed rolling windows suit demo traffic; Upstash/Redis can be
 added for higher-throughput enforcement. The core intentionally does not require
 another service to provision before the demo works. Latency metrics cover scoring
 and resource preparation, excluding the final decision-log write/network response.
-Groq/open-weight AI traffic analysis is the next feature, after the core works;
-`GROQ_API_KEY` is reserved in `.env.example` but is not used or required yet.
+AI findings are probabilistic and sample-limited, not a trained bot classifier or
+proof of abuse. Next demo additions can include a bounded traffic simulator and a
+honeypot; neither is required for the current core to function.
 
 ---
 

@@ -8,6 +8,7 @@ import { Icon, type IconName } from "./icons";
 import { ProtectedInspector } from "./protected-inspector";
 import { number, time, TrafficChart } from "./traffic-chart";
 import { useTelemetry, type DecisionFilter } from "./use-telemetry";
+import { AiAnalyst } from "./ai-analyst";
 
 type Auth = { status: "checking" | "ready" | "signed-out" | "error"; required: boolean };
 type AuthResponse = { authenticated: boolean; required?: boolean };
@@ -106,6 +107,7 @@ export function SentinelDashboard() {
         {telemetry.decisionsError && (!telemetry.statsError || telemetry.statsError.code !== telemetry.decisionsError.code) && <ErrorNotice error={telemetry.decisionsError} label="Decision feed" />}
         <SummaryCards stats={telemetry.stats} loading={telemetry.loading} stale={!!telemetry.statsError} />
         <TrafficChart stats={telemetry.stats} loading={telemetry.loading} stale={!!telemetry.statsError} />
+        <AiAnalyst onUnauthorized={onUnauthorized} />
         <div className="feed-heading"><span><i className={`dot ${feedError ? "disconnected" : telemetry.history ? "challenge" : "allow"}`} />{feedError ? "Feed interrupted · retrying automatically" : telemetry.history ? "History view · stats continue updating" : "Auto-refreshes every 5 seconds"}</span><span>Explainable by design</span></div>
         <Decisions key={`${filter}-${revision}`} rows={telemetry.rows} filter={filter} onFilter={setFilter} loading={telemetry.loading} loadingMore={telemetry.loadingMore} refreshing={telemetry.refreshing} nextCursor={telemetry.nextCursor} history={telemetry.history} loadMore={telemetry.loadMore} refresh={refresh} unavailable={!!telemetry.decisionsError} />
         <ProtectedInspector onUnauthorized={onUnauthorized} />

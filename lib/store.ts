@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Decision, DecisionRecord, DecisionsResponse, StatsResponse } from "./contracts";
+import type { AnalysisRecord, Decision, DecisionRecord, DecisionsResponse, StatsResponse } from "./contracts";
 import { ApiFailure } from "./errors";
 
 function databaseConfig() {
@@ -107,4 +107,33 @@ export async function getDecisions(limit: number, decision?: Decision, cursor?: 
 export async function getStats(): Promise<StatsResponse> {
   // Aggregate in Postgres, not a capped PostgREST result set.
   return await database("rpc/gw_stats", { method: "POST", body: "{}" }) as StatsResponse;
+}
+
+interface DatabaseAnalysis {
+  id: string; created_at: string; model: string; input_hash: string;
+  sample_size: number; window_total: number; window_start: string; window_end: string;
+  finding: AnalysisRecord["finding"];
+}
+function toAnalysis(row: DatabaseAnalysis): AnalysisRecord {
+  return { id: row.id, createdAt: row.created_at, model: row.model, inputHash: row.input_hash,
+    sampleSize: row.sample_size, windowTotal: row.window_total, windowStart: row.window_start,
+    windowEnd: row.window_end, finding: row.finding };
+}
+export async function getAnalyses(): Promise<AnalysisRecord[]> {
+  const params = new URLSearchParams({ select: "*", order: "created_at.desc,id.desc", limit: "5" });
+  const data = await database(`gw_analyses?${params}`) as DatabaseAnalysis[];
+  return data.map(toAnalysis);
+}
+export async function getCachedAnalysis(hash: string): Promise<AnalysisRecord | null> {
+  const params = new URLSearchParams({ select: "*", input_hash: `eq.${hash}`,
+    created_at: `gte.${new Date(Date.now() - 5 * 60000).toISOString()}`, order: "created_at.desc,id.desc", limit: "1" });
+  const data = await database(`gw_analyses?${params}`) as DatabaseAnalysis[];
+  return data[0] ? toAnalysis(data[0]) : null;
+}
+export async function saveAnalysis(analysis: AnalysisRecord): Promise<void> {
+  await database("gw_analyses", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({
+    id: analysis.id, created_at: analysis.createdAt, model: analysis.model, input_hash: analysis.inputHash,
+    sample_size: analysis.sampleSize, window_total: analysis.windowTotal, window_start: analysis.windowStart,
+    window_end: analysis.windowEnd, finding: analysis.finding,
+  }) });
 }

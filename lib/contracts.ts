@@ -46,3 +46,26 @@ export interface GatewayResponse extends ScoreResult {
   data?: { message: string; items: { id: string; name: string; price: number }[] };
 }
 export interface ApiError { error: string; code: string }
+
+export interface TrafficFinding {
+  classification: "normal" | "mixed" | "likely_automation" | "insufficient_evidence";
+  risk: "low" | "medium" | "high";
+  summary: string;
+  evidence: string[];
+  recommendedAction: "observe" | "challenge" | "block";
+  recommendations: string[];
+  limitations: string;
+}
+export interface AnalysisRecord {
+  id: string;
+  createdAt: string;
+  model: string;
+  inputHash: string;
+  sampleSize: number;
+  windowTotal: number;
+  windowStart: string;
+  windowEnd: string;
+  finding: TrafficFinding;
+}
+export interface AnalysisHistoryResponse { analyses: AnalysisRecord[]; configured: boolean; model: string }
+export interface AnalyzeResponse { analysis: AnalysisRecord; cached: boolean }

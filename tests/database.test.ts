@@ -1,5 +1,5 @@
 import { PGlite } from "@electric-sql/pglite";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { StatsResponse } from "../lib/contracts";
@@ -10,9 +10,12 @@ import type { RequestWindow } from "../lib/store";
 const db = new PGlite();
 beforeAll(async () => {
   await db.exec("create role anon; create role authenticated; create role service_role bypassrls;");
-  await db.exec(readFileSync(new URL("../supabase/migrations/20261029072825_core_gateway.sql", import.meta.url), "utf8"));
+  const directory = new URL("../supabase/migrations/", import.meta.url);
+  for (const file of readdirSync(directory).filter(file => file.endsWith(".sql")).sort()) {
+    await db.exec(readFileSync(new URL(file, directory), "utf8"));
+  }
 }, 30000);
-beforeEach(async () => { await db.exec("truncate public.gw_clients, public.gw_decisions, public.gw_challenges;"); });
+beforeEach(async () => { await db.exec("truncate public.gw_clients, public.gw_decisions, public.gw_challenges, public.gw_analyses;"); });
 afterAll(async () => { await db.close(); });
 
 async function record(key: string) {
@@ -74,5 +77,17 @@ describe("Supabase SQL migration", () => {
       select public.gw_cleanup();`);
     expect((await db.query("select * from public.gw_clients")).rows).toHaveLength(0);
     expect((await db.query("select * from public.gw_challenges")).rows).toHaveLength(0);
+  });
+  it("keeps AI analyses server-only and expires them after seven days", async () => {
+    const { rows } = await db.query<{ anonymous: boolean; backend: boolean }>(`select
+      has_table_privilege('anon', 'public.gw_analyses', 'select') as anonymous,
+      has_table_privilege('service_role', 'public.gw_analyses', 'insert') as backend`);
+    expect(rows[0]).toEqual({ anonymous: false, backend: true });
+    await db.query(`insert into public.gw_analyses
+      (id, created_at, model, input_hash, sample_size, window_total, window_start, window_end, finding)
+      values ($1, now() - interval '8 days', 'test-model', $2, 1, 1, now() - interval '60 minutes', now(), '{}')`,
+      [randomUUID(), "a".repeat(64)]);
+    await db.exec("select public.gw_cleanup()");
+    expect((await db.query("select * from public.gw_analyses")).rows).toHaveLength(0);
   });
 });
