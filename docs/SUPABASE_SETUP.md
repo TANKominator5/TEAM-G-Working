@@ -5,25 +5,32 @@
 - API URL: `https://kihjfjgaeeuocilifcsd.supabase.co`
 - Applied migration: `20261029072825_core_gateway.sql` (`core_gateway` in remote history).
 - Applied AI migration: `20261029084105_ai_traffic_analyses.sql` (`ai_traffic_analyses`).
+- Applied security-signal migration: `20261029102952_fingerprint_honeypot_signals.sql`.
 
-Both migrations are **already applied** through Supabase MCP. Do not apply them
+All three migrations are **already applied** through Supabase MCP. Do not apply them
 again to BotStop. The local filenames match Supabase's recorded migration versions.
 
 ## Verified on the live database
 
-- All four gateway/analysis tables exist with RLS enabled.
+- All six gateway/analysis/security-signal tables exist with RLS enabled.
 - `anon` and `authenticated` cannot read tables or execute gateway/stats RPCs.
 - The server's `service_role` can update rolling windows, insert decisions, and
   retrieve aggregate stats with 60 minute buckets.
 - Verification writes were wrapped in a transaction and rolled back, leaving no
   artificial traffic in the dashboard.
-- Security advisors reported no warning/error findings. The four informational
+- Security advisors reported no warning/error findings. The six informational
   "RLS Enabled No Policy" notices are intentional: there is no browser data access,
   and the privileged backend role bypasses RLS.
 
 The `gw_analyses` table stores validated advisory Groq findings and cache metadata.
 The server role can select, insert, and delete; browser roles have no access.
 Cleanup also removes analyses older than seven days.
+
+`gw_signals` records passive fingerprint changes in 10-minute activity windows.
+`gw_honeypots` keeps at most 20 trap timestamps per IP-hash/fingerprint pair for a
+rolling ten minutes. The backend-only `gw_observe_security` RPC serializes updates.
+Both tables expire after one day through cleanup. Live transaction-rolled-back
+checks verified trap persistence and browser-role denial before deployment.
 
 ## Runtime credentials
 

@@ -1,3 +1,4 @@
+-- Applied to BotStop via MCP as migration 20261029102952.
 begin;
 
 create table public.gw_signals (
