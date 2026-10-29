@@ -3,3 +3,9 @@ __pycache__/
 node_modules/
 *.pyc
 .venv/
+.env*
+!.env.example
+.next/
+.vercel/
+coverage/
+*.tsbuildinfo
