@@ -8,6 +8,8 @@
 The original event brief is preserved below. The old Flask/Express files are
 starter references only; `npm` now runs the Next.js application.
 
+**Demo walkthrough and delivery status:** [`docs/DEMO_RUNBOOK.md`](docs/DEMO_RUNBOOK.md).
+
 ### Current core features
 
 - Application-layer middleware (`lib/gateway.ts`) scores every request to the
@@ -26,8 +28,11 @@ starter references only; `npm` now runs the Next.js application.
 - Password-protected telemetry in production with rate-limited login and signed
   HttpOnly session cookies. No raw IPs or authorization/cookie headers are stored.
 - Optional **AI traffic analyst** using an open-weight model on Groq (default:
-  Llama 3.3 70B). It summarizes evidence from recent traffic, persists advisory
+  GPT-OSS 120B). It summarizes evidence from recent traffic, persists advisory
   findings, and never changes gateway enforcement. See AI setup below.
+- Guided normal/suspicious/burst demonstrations send real protected requests with
+  operator-only isolated windows, a 100-request/minute demo budget, and explicit
+  simulation labels. Ordinary visitors' rate windows are unchanged.
 
 ### Local setup
 
@@ -53,7 +58,8 @@ openssl rand -hex 32
    supported by the server-side REST adapter.
 3. Run `npm run dev` and open `http://localhost:3000`.
 4. Open `/protected` in a browser. Visit `/challenge` to complete a browser check
-   when challenged. All local requests deliberately share one development identity.
+   when challenged. Ordinary local requests share one development identity;
+   authenticated demo runs use isolated identities.
 
 Without valid Supabase configuration/migration, protected requests and telemetry
 return **503**, not fabricated traffic or an unprotected resource.
@@ -115,15 +121,17 @@ Add a Groq API key to `.env.local` and Vercel's server environment:
 
 ```dotenv
 GROQ_API_KEY=<your Groq key>
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 ```
 
 Restart/redeploy, sign in, generate a request using the inspector, then click
 **Analyze traffic**. A hosted inference provider runs the model; Vercel does not
 host the model weights. `GROQ_MODEL` can select another Groq-supported text model.
 
-The analyst uses JSON-object mode plus server-side Zod validation (Llama 3.3 does
-not support Groq's strict JSON-schema mode). It analyzes at most 100 recent
+The analyst uses JSON-object mode plus server-side Zod validation across models.
+GPT-OSS uses low reasoning effort for a responsive demo. The user's Groq account
+offers GPT-OSS 120B but does not list Llama 3.3 70B; a different available text model
+can be selected through `GROQ_MODEL`. It analyzes at most 100 recent
 requests and the 10 largest sampled client groups, reports the sample size, and
 persists findings in Supabase. Only anonymized numeric observations, timestamps,
 and allowlisted signal codes are sent: no raw IPs, persistent client IDs, user-agent
@@ -138,9 +146,9 @@ and rate limits are shown as errors; the gateway remains functional. Analyses
 expire after seven days through the cleanup function.
 
 Without `GROQ_API_KEY`, the dashboard explicitly shows AI setup instructions and
-does not fabricate findings. Live model inference still needs verification once
-the user's Groq credential is configured; provider responses in regression tests
-are mocked and do not demonstrate real inference quality.
+does not fabricate findings. Real GPT-OSS 120B inference, persistence, and cache
+reuse have been verified against the user's Groq account and BotStop. Regression
+tests still mock provider responses and should not be confused with those live checks.
 
 ### Deploy to Vercel
 
@@ -167,8 +175,8 @@ added for higher-throughput enforcement. The core intentionally does not require
 another service to provision before the demo works. Latency metrics cover scoring
 and resource preparation, excluding the final decision-log write/network response.
 AI findings are probabilistic and sample-limited, not a trained bot classifier or
-proof of abuse. Next demo additions can include a bounded traffic simulator and a
-honeypot; neither is required for the current core to function.
+proof of abuse. Public deployment and submission remain outstanding; honeypots,
+fingerprinting, exports, and a custom small classifier are optional next additions.
 
 ---
 

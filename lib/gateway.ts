@@ -1,17 +1,21 @@
 import { randomUUID } from "node:crypto";
 import type { DecisionRecord, GatewayResponse, RequestFeatures } from "./contracts";
 import { issueChallenge, hasClearance } from "./challenge";
-import { clientKey } from "./security";
+import { requestIdentity } from "./request-identity";
 import { scoreRequest } from "./scoring";
 import { recordRequest, saveDecision } from "./store";
-import { errorResponse } from "./errors";
+import { ApiFailure, errorResponse } from "./errors";
 
 /** Application-layer middleware: wrap each resource that requires protection. */
 export function withGateway(resource: () => Promise<NonNullable<GatewayResponse["data"]>>) {
   return async (request: Request): Promise<Response> => {
     const started = performance.now();
     try {
-      const key = clientKey(request);
+      const { key, realKey, isDemo } = requestIdentity(request);
+      if (isDemo) {
+        const budget = await recordRequest(`demo_${realKey}`);
+        if (budget.requests60s > 100) throw new ApiFailure(429, "DEMO_BUDGET_LIMIT", "Demo traffic is limited to 100 requests per minute. Wait before running another scenario.");
+      }
       const window = await recordRequest(key);
       const features: RequestFeatures = {
         userAgent: (request.headers.get("user-agent") ?? "").slice(0, 512),
@@ -20,6 +24,7 @@ export function withGateway(resource: () => Promise<NonNullable<GatewayResponse[
         ...window,
       };
       const result = scoreRequest(features, hasClearance(request, key));
+      if (isDemo) result.reasons.push({ code: "DEMO_TRAFFIC", message: "Operator-initiated demo traffic with an isolated rate window. This is not an observed real-world attack.", weight: 0 });
       const status = result.decision === "allow" ? 200 : result.decision === "challenge" ? 403 : 429;
       const id = randomUUID();
       const body: GatewayResponse = { ...result, requestId: id };

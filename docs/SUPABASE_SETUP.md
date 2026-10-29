@@ -71,5 +71,13 @@ resource inspection, and a 390px mobile layout with no page overflow or JavaScri
 errors. Deterministic browser regressions separately cover pagination, filters,
 setup failures, and expired sessions.
 
+Groq is now configured in the project's ignored `.env.local`. The account's model
+catalog does not list Llama 3.3 70B, so the verified default is the open-weight
+`openai/gpt-oss-120b`. A real finding returned in about 3.5 seconds, passed schema
+validation, persisted to BotStop, and was reused on an identical cached request.
+An additional live browser run verified the isolated normal/challenge/burst demo,
+actual proof completion and retry, real model analysis with simulation labeling,
+and continued ordinary visitor access after the demo burst.
+
 The deployed Vercel application still requires end-to-end verification after
 deployment. Local checks do not substitute for production verification.

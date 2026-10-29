@@ -5,6 +5,7 @@ import type { GatewayResponse } from "@/lib/contracts";
 import { asError, DashboardError, errorTitle, fetchJson } from "./api";
 import { DecisionBadge, Reasons } from "./decisions";
 import { Icon } from "./icons";
+import { rememberChallenge } from "./pending-challenge";
 
 export function ProtectedInspector({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [result, setResult] = useState<{ body: GatewayResponse; status: number } | null>(null);
@@ -18,7 +19,13 @@ export function ProtectedInspector({ onUnauthorized }: { onUnauthorized: () => v
     const controller = new AbortController();
     request.current = controller;
     setPending(true); setError(null); setResult(null);
-    try { const response = await fetchJson<GatewayResponse>("/protected", { signal: controller.signal }, true); if (!controller.signal.aborted) setResult(response); }
+    try {
+      const response = await fetchJson<GatewayResponse>("/protected", { signal: controller.signal }, true);
+      if (!controller.signal.aborted) {
+        if (response.body.challenge) rememberChallenge(response.body.challenge);
+        setResult(response);
+      }
+    }
     catch (error) {
       if (controller.signal.aborted) return;
       const parsed = asError(error);

@@ -23,7 +23,7 @@ const finding: TrafficFinding = {
   recommendations: ["Retain hard limits and review shared-IP false positives."],
   limitations: "A small sample and a shared IP do not prove malicious automation.",
 };
-const saved: AnalysisRecord = { id: "analysis-id", createdAt: timestamp, model: "llama-3.3-70b-versatile",
+const saved: AnalysisRecord = { id: "analysis-id", createdAt: timestamp, model: "openai/gpt-oss-120b",
   inputHash: "a".repeat(64), sampleSize: 1, windowTotal: 3, windowStart: timestamp,
   windowEnd: "2026-10-29T12:01:00Z", finding };
 const fetchMock = vi.fn<typeof fetch>();
@@ -62,9 +62,14 @@ describe("privacy-preserving AI traffic analysis", () => {
     expect(summary.detailedClients).toHaveLength(10);
     expect(JSON.stringify(summary)).not.toContain("UNTRUSTED_INSTRUCTION");
   });
+  it("explicitly identifies demo traffic for the model", () => {
+    const summary = summarizeTraffic(stats, [{ ...record, reasons: [{ code: "DEMO_TRAFFIC", message: "Simulation", weight: 0 }] }]);
+    expect(summary.demoRequestsInSample).toBe(1);
+    expect(summary.detailedClients[0].signals.DEMO_TRAFFIC).toBe(1);
+  });
   it("validates and persists a real provider-shaped response", async () => {
     const result = await analyzeTraffic();
-    expect(result).toMatchObject({ cached: false, analysis: { model: "llama-3.3-70b-versatile", sampleSize: 1, finding } });
+    expect(result).toMatchObject({ cached: false, analysis: { model: "openai/gpt-oss-120b", sampleSize: 1, finding } });
     expect(store.saveAnalysis).toHaveBeenCalledWith(expect.objectContaining({ finding, inputHash: expect.stringMatching(/^[a-f0-9]{64}$/) }));
     expect(store.recordRequest).toHaveBeenCalledWith("ai_global");
   });
@@ -132,6 +137,6 @@ describe("AI API authorization", () => {
   it("returns saved findings and configuration presence without exposing credentials", async () => {
     vi.mocked(store.getAnalyses).mockResolvedValue([saved]);
     const response = await list(new Request("http://localhost/api/analyses"));
-    expect(await response.json()).toEqual({ analyses: [saved], configured: true, model: "llama-3.3-70b-versatile" });
+    expect(await response.json()).toEqual({ analyses: [saved], configured: true, model: "openai/gpt-oss-120b" });
   });
 });

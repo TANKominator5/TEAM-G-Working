@@ -47,6 +47,11 @@ export interface GatewayResponse extends ScoreResult {
 }
 export interface ApiError { error: string; code: string }
 
+export const DEMO_HEADER = "x-sentinel-demo-run";
+export function isDemoRunId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export interface TrafficFinding {
   classification: "normal" | "mixed" | "likely_automation" | "insufficient_evidence";
   risk: "low" | "medium" | "high";

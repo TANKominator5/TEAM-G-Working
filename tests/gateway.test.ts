@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import { withGateway } from "../lib/gateway";
 import { issueChallenge, solveChallenge, hasClearance } from "../lib/challenge";
-import { clientKey } from "../lib/security";
+import { clientKey, signToken } from "../lib/security";
+import { DEMO_HEADER } from "../lib/contracts";
 import * as store from "../lib/store";
 
 vi.mock("../lib/store", () => ({ recordRequest: vi.fn(), saveDecision: vi.fn(), consumeChallenge: vi.fn() }));
@@ -17,6 +18,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("GATEWAY_SECRET", "test-secret-must-be-at-least-32-characters");
   vi.stubEnv("NODE_ENV", "test"); vi.stubEnv("VERCEL", ""); vi.stubEnv("TRUST_PROXY", "false");
+  vi.stubEnv("DASHBOARD_PASSWORD", "required-password");
   vi.mocked(store.recordRequest).mockResolvedValue(normalWindow);
   vi.mocked(store.saveDecision).mockResolvedValue();
   vi.mocked(store.consumeChallenge).mockResolvedValue();
@@ -60,6 +62,25 @@ describe("gateway middleware", () => {
     const response = await gateway(browser());
     expect(response.status).toBe(503);
     expect(await response.json()).not.toHaveProperty("data");
+  });
+  it("labels authenticated demo requests and charges the shared demo budget", async () => {
+    const cookie = `sentinel_admin=${signToken({ kind: "admin", exp: Date.now() + 60000 })}`;
+    const response = await gateway(new Request(browser(), { headers: {
+      ...Object.fromEntries(browser().headers), cookie, [DEMO_HEADER]: randomUUID(),
+    } }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.reasons).toContainEqual(expect.objectContaining({ code: "DEMO_TRAFFIC", weight: 0 }));
+    expect(store.recordRequest).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(store.recordRequest).mock.calls[0][0]).toMatch(/^demo_[a-f0-9]{64}$/);
+  });
+  it("bounds demo traffic without executing the protected resource", async () => {
+    const cookie = `sentinel_admin=${signToken({ kind: "admin", exp: Date.now() + 60000 })}`;
+    vi.mocked(store.recordRequest).mockResolvedValue({ ...normalWindow, requests10s: 101, requests60s: 101 });
+    const response = await gateway(new Request(browser(), { headers: { cookie, [DEMO_HEADER]: randomUUID() } }));
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ code: "DEMO_BUDGET_LIMIT" });
+    expect(resource).not.toHaveBeenCalled();
   });
 });
 

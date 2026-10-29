@@ -28,7 +28,7 @@ async function mockApi(page: Page, initiallyAuthenticated = true) {
     await route.fulfill({ json: { authenticated, required: true } });
   });
   await page.route("**/api/stats", async route => { calls.stats++; await route.fulfill({ json: stats }); });
-  await page.route("**/api/analyses", route => route.fulfill({ json: { analyses: [], configured: false, model: "llama-3.3-70b-versatile" } }));
+  await page.route("**/api/analyses", route => route.fulfill({ json: { analyses: [], configured: false, model: "openai/gpt-oss-120b" } }));
   await page.route("**/api/decisions?*", async route => {
     calls.decisions++;
     const params = new URL(route.request().url()).searchParams;
@@ -125,9 +125,9 @@ test("AI setup is explicit and never fabricates a finding", async ({ page }) => 
 
 test("AI findings are displayed as advisory evidence, not enforced actions", async ({ page }) => {
   await mockApi(page);
-  await page.route("**/api/analyses", route => route.fulfill({ json: { analyses: [], configured: true, model: "llama-3.3-70b-versatile" } }));
+  await page.route("**/api/analyses", route => route.fulfill({ json: { analyses: [], configured: true, model: "openai/gpt-oss-120b" } }));
   await page.route("**/api/analyze", route => route.fulfill({ json: { cached: false, analysis: {
-    id: "fixture-analysis", createdAt: timestamp, model: "llama-3.3-70b-versatile", inputHash: "test-hash",
+    id: "fixture-analysis", createdAt: timestamp, model: "openai/gpt-oss-120b", inputHash: "test-hash",
     sampleSize: 10, windowTotal: 40, windowStart: timestamp, windowEnd: timestamp,
     finding: { classification: "likely_automation", risk: "high", summary: "A test-only burst pattern was observed.",
       evidence: ["Ten sampled requests arrived in one second."], recommendedAction: "challenge",
@@ -138,4 +138,55 @@ test("AI findings are displayed as advisory evidence, not enforced actions", asy
   await expect(page.getByText("A test-only burst pattern was observed.", { exact: true })).toBeVisible();
   await expect(page.getByText(/AI does not change gateway decisions/)).toBeVisible();
   await expect(page.getByRole("button", { name: /12:00 · high/ })).toBeVisible();
+});
+
+test("guided demo is bounded and gives each scenario a fresh run identity", async ({ page }) => {
+  await mockApi(page);
+  const counts = new Map<string, number>();
+  await page.route("**/protected", async route => {
+    const request = route.request();
+    const runId = request.headers()["x-sentinel-demo-run"];
+    expect(runId).toMatch(/^[a-f0-9-]{36}$/);
+    const count = (counts.get(runId) ?? 0) + 1; counts.set(runId, count);
+    const suspicious = request.headers()["accept"] === "";
+    const decision = count > 20 ? "block" : suspicious && count > 5 ? "challenge" : "allow";
+    await route.fulfill({ status: decision === "allow" ? 200 : decision === "challenge" ? 403 : 429,
+      json: { score: decision === "allow" ? 0 : decision === "challenge" ? 45 : 80,
+        decision, reasons: [], requestId: `demo-${count}`,
+        ...(decision === "challenge" ? { challenge: { token: "test-only-token", difficulty: 4,
+          expiresAt: new Date(Date.now() + 60000).toISOString(), algorithm: "sha256" } } : {}),
+      } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "1. Normal visitor", exact: true }).click();
+  await expect(page.getByLabel("Demo result")).toContainText("1 allowed");
+  await page.getByRole("button", { name: "2. Suspicious client", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Complete browser challenge" })).toBeVisible();
+  await page.getByRole("button", { name: "3. Burst traffic", exact: true }).click();
+  await expect(page.getByLabel("Demo result")).toContainText("24 requests completed");
+  await expect(page.getByLabel("Demo result")).toContainText("4 blocked");
+  expect([...counts.values()]).toEqual([1, 6, 24]);
+});
+
+test("challenge navigation verifies the issued token rather than replacing it", async ({ page }) => {
+  await mockApi(page);
+  let verified = false;
+  const token = "original-browser-fixture-challenge";
+  await page.route("**/protected", route => route.fulfill(verified ? {
+    json: { score: 0, decision: "allow", reasons: [], requestId: "cleared" },
+  } : { status: 403, json: {
+    score: 45, decision: "challenge", reasons: [], requestId: "challenged",
+    challenge: { token, difficulty: 1, expiresAt: new Date(Date.now() + 60000).toISOString(), algorithm: "sha256" },
+  } }));
+  await page.route("**/api/challenge/verify", async route => {
+    expect(route.request().postDataJSON().token).toBe(token);
+    verified = true;
+    await route.fulfill({ json: { verified: true, expiresIn: 900 } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try protected API", exact: true }).click();
+  await page.getByRole("link", { name: "Continue to challenge" }).click();
+  await page.getByRole("button", { name: "Verify browser", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("The protected API returned HTTP 200");
+  expect(verified).toBe(true);
 });
