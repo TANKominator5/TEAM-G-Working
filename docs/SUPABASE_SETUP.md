@@ -20,7 +20,7 @@ again to BotStop. The local filename matches Supabase's recorded migration versi
   "RLS Enabled No Policy" notices are intentional: there is no browser data access,
   and the privileged backend role bypasses RLS.
 
-## Remaining: runtime credentials
+## Runtime credentials
 
 MCP authorization lets the coding agent manage the project; it does **not** log the
 Next.js app into Supabase. The app still requires a separate server-side key.
@@ -43,6 +43,22 @@ Generate a signing secret locally with `openssl rand -hex 32`. Restart the Next.
 server after changing `.env.local`. Configure the same variables separately in
 Vercel, then redeploy. Never prefix these keys with `NEXT_PUBLIC_`.
 
-The application-level REST connection and deployed demo must still be verified
-once that server credential is configured. Database checks alone are not an
-end-to-end deployment test.
+## Verified application integration
+
+The local Next.js application has now been tested against the actual BotStop REST
+API with server credentials (no secrets were printed or committed):
+
+- Unauthenticated telemetry returns 401; password login creates a working session.
+- A normal request receives the protected inventory with HTTP 200.
+- A suspicious request receives HTTP 403 and a signed challenge.
+- Correct proof grants clearance; reusing the proof is rejected by the database.
+- A bounded 23-request burst triggers HTTP 429 and `Retry-After`.
+- Stats report all three decisions and 60 minute buckets; history contains the
+  actual protected request IDs.
+
+These checks generated real, bounded test traffic visible in recent decisions.
+The loopback-only test server used distinct documentation-range client addresses
+under an explicit trusted-proxy override; production IP trust was not changed.
+
+The deployed Vercel application and teammate's dashboard UI still require their
+own end-to-end verification after deployment/integration.

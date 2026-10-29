@@ -69,8 +69,22 @@ export function clearanceBinding(request: Request, key: string): string {
 
 export function requireSameOrigin(request: Request): void {
   const origin = request.headers.get("origin");
-  const expected = new URL(request.url).origin;
-  if ((origin && origin !== expected) || request.headers.get("sec-fetch-site") === "cross-site") {
+  let matches = true;
+  if (origin) {
+    try {
+      const internal = new URL(request.url);
+      // Next.js may normalize request.url to localhost. Host is the actual
+      // destination and cannot be changed by browser JavaScript making a CSRF request.
+      const host = request.headers.get("host") ?? internal.host;
+      if (/[\s/@?#\\]/.test(host)) throw new Error("Invalid host");
+      const trustedProxy = process.env.VERCEL === "1" || process.env.TRUST_PROXY === "true";
+      const forwarded = trustedProxy ? request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() : null;
+      const protocol = forwarded === "https" || forwarded === "http" ? `${forwarded}:` : internal.protocol;
+      const expected = new URL(`${protocol}//${host}`).origin;
+      matches = origin === expected;
+    } catch { matches = false; }
+  }
+  if (!matches || request.headers.get("sec-fetch-site") === "cross-site") {
     throw new ApiFailure(403, "CROSS_ORIGIN_DENIED", "Cross-origin mutations are not permitted.");
   }
 }

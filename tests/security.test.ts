@@ -40,6 +40,40 @@ describe("request and session security", () => {
     expect(() => requireSameOrigin(new Request("https://app.test/api/auth", { headers: { origin: "https://evil.test" } }))).toThrow();
     expect(() => requireSameOrigin(new Request("https://app.test/api/auth", { headers: { origin: "https://app.test" } }))).not.toThrow();
   });
+  it("accepts the real destination when Next normalizes a local alias", () => {
+    expect(() => requireSameOrigin(new Request("http://localhost:3001/api/auth", { headers: {
+      host: "127.0.0.1:3001", origin: "http://127.0.0.1:3001",
+    } }))).not.toThrow();
+  });
+  it("does not treat another origin as an allowed hostname alias", () => {
+    expect(() => requireSameOrigin(new Request("http://localhost:3001/api/auth", { headers: {
+      host: "127.0.0.1:3001", origin: "http://localhost:3001",
+    } }))).toThrow();
+  });
+  it("uses forwarded protocol only behind an explicitly trusted proxy", () => {
+    const request = new Request("http://internal/api/auth", { headers: {
+      host: "app.test", origin: "https://app.test", "x-forwarded-proto": "https",
+    } });
+    expect(() => requireSameOrigin(request)).toThrow();
+    vi.stubEnv("TRUST_PROXY", "true");
+    expect(() => requireSameOrigin(request)).not.toThrow();
+  });
+  it("never trusts a forwarded host to approve cross-origin requests", () => {
+    vi.stubEnv("VERCEL", "1");
+    expect(() => requireSameOrigin(new Request("https://app.test/api/auth", { headers: {
+      host: "app.test", origin: "https://evil.test", "x-forwarded-host": "evil.test",
+    } }))).toThrow();
+  });
+  it("rejects malformed origins, hosts, and cross-site fetches", () => {
+    const cases: Record<string, string>[] = [
+      { origin: "null" },
+      { origin: "https://evil.test", host: "app.test@evil.test" },
+      { origin: "https://app.test", "sec-fetch-site": "cross-site" },
+    ];
+    for (const headers of cases) {
+      expect(() => requireSameOrigin(new Request("https://app.test/api/auth", { headers }))).toThrow();
+    }
+  });
   it("parses only the exact cookie name", () => {
     expect(cookie(new Request("https://app.test", { headers: { cookie: "not_admin=x; admin=y" } }), "admin")).toBe("y");
     expect(sessionCookie("admin", "x", 30)).toContain("HttpOnly; SameSite=Strict");
