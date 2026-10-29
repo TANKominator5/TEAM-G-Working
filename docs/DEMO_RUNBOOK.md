@@ -2,7 +2,7 @@
 
 ## Launch locally
 
-Requires Node.js 22+ and the project `.env.local` at:
+Requires Node.js 24 LTS and the project `.env.local` at:
 
 `/home/debajit/Projects/TEAM-G-Working/.env.local`
 

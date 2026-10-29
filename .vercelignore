@@ -1,0 +1,19 @@
+# Secrets must be supplied through Vercel environment variables, never uploads.
+.env
+.env.*
+.git
+.next
+.vercel
+node_modules
+coverage
+playwright-report
+test-results
+supabase/.temp
+
+# Test-only files and unused starter implementations are not production inputs.
+tests
+e2e
+app.py
+script.js
+requirements.txt
+index.html

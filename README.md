@@ -36,7 +36,7 @@ starter references only; `npm` now runs the Next.js application.
 
 ### Local setup
 
-Requires Node.js **22+** (24 LTS recommended).
+Requires Node.js **24 LTS**, matching the pinned Vercel runtime.
 
 ```bash
 git switch team-g-solution
@@ -161,7 +161,12 @@ tests still mock provider responses and should not be confused with those live c
    dashboard persistence. Apply the Supabase migration before this check.
 5. Schedule `select public.gw_cleanup();` daily using Supabase Cron, or run manually
    for the hackathon. It retains decision history for 7 days, client state for 1 day,
-   and removes expired challenge redemptions.
+    and removes expired challenge redemptions.
+
+`vercel.json` pins Next.js build/install commands and runs functions in Seoul
+(`icn1`), near the BotStop database. `.vercelignore` excludes local secrets, test
+artifacts, and unused starter implementations from CLI uploads. Environment
+variables must be configured separately in Vercel; `.env.local` is never uploaded.
 
 Outside Vercel, production requires an IP-overwriting trusted proxy and explicit
 `TRUST_PROXY=true`. Never enable this behind an untrusted forwarding proxy.
